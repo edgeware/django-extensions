@@ -121,7 +121,11 @@ class Command(BaseCommand):
             raise CommandError("Error occurred while trying to load %s: %s" % (getattr(settings, urlconf), str(e)))
 
         view_functions = self.extract_views_from_urlpatterns(urlconf.urlpatterns)
-        for (func, regex, url_name) in view_functions:
+        for (func, regex, url_name, *deprecated) in view_functions:
+            if len(deprecated) > 0:
+                deprecated = deprecated[0]
+            else:
+                deprecated = False
             if hasattr(func, '__globals__'):
                 func_globals = func.__globals__
             elif hasattr(func, 'func_globals'):
@@ -148,7 +152,7 @@ class Command(BaseCommand):
             decorator = ', '.join(decorators)
 
             if format_style == 'json':
-                views.append({"url": url, "module": module, "name": url_name, "decorators": decorator})
+                views.append({"url": url, "module": module, "name": url_name, "decorators": decorator, "deprecated": deprecated})
             else:
                 views.append(fmtr.format(
                     module='{0}.{1}'.format(style.MODULE(func.__module__), style.MODULE_NAME(func_name)),
@@ -203,6 +207,8 @@ class Command(BaseCommand):
         """
         views = []
         for p in urlpatterns:
+            deprecated = False
+
             if isinstance(p, (URLPattern, RegexURLPattern)):
                 try:
                     if not p.name:
@@ -211,8 +217,13 @@ class Command(BaseCommand):
                         name = '{0}:{1}'.format(namespace, p.name)
                     else:
                         name = p.name
+                    if hasattr(p, "deprecated"):
+                        deprecated = p.deprecated
+
                     pattern = describe_pattern(p)
-                    views.append((p.callback, base + pattern, name))
+                    views.append(
+                        (p.callback, base + pattern, name, deprecated)
+                    )
                 except ViewDoesNotExist:
                     continue
             elif isinstance(p, (URLResolver, RegexURLResolver)):
