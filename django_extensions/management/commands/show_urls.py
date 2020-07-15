@@ -121,7 +121,12 @@ class Command(BaseCommand):
             raise CommandError("Error occurred while trying to load %s: %s" % (getattr(settings, urlconf), str(e)))
 
         view_functions = self.extract_views_from_urlpatterns(urlconf.urlpatterns)
-        for (func, regex, url_name) in view_functions:
+        for (func, regex, url_name, *dep_status) in view_functions:
+            if dep_status:
+                deprecated = bool(dep_status[0])
+            else:
+                deprecated = False
+
             if hasattr(func, '__globals__'):
                 func_globals = func.__globals__
             elif hasattr(func, 'func_globals'):
@@ -148,7 +153,7 @@ class Command(BaseCommand):
             decorator = ', '.join(decorators)
 
             if format_style == 'json':
-                views.append({"url": url, "module": module, "name": url_name, "decorators": decorator})
+                views.append({"url": url, "module": module, "name": url_name, "decorators": decorator, "deprecated": deprecated})
             else:
                 views.append(fmtr.format(
                     module='{0}.{1}'.format(style.MODULE(func.__module__), style.MODULE_NAME(func_name)),
@@ -211,8 +216,12 @@ class Command(BaseCommand):
                         name = '{0}:{1}'.format(namespace, p.name)
                     else:
                         name = p.name
+                    deprecated = getattr(p, "deprecated", False)
+
                     pattern = describe_pattern(p)
-                    views.append((p.callback, base + pattern, name))
+                    views.append(
+                        (p.callback, base + pattern, name, deprecated)
+                    )
                 except ViewDoesNotExist:
                     continue
             elif isinstance(p, (URLResolver, RegexURLResolver)):
